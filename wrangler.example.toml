@@ -1,0 +1,16 @@
+name = "cloudcontext"
+main = "src/worker.js"
+compatibility_date = "2024-01-01"
+account_id = "YOUR_ACCOUNT_ID"
+[[r2_buckets]]
+binding = "R2_BUCKET"
+bucket_name = "cloudcontext-storage"
+[[kv_namespaces]]
+binding = "KV_METADATA"
+id = "YOUR_METADATA_KV_ID"
+[[kv_namespaces]]
+binding = "KV_AUTH"
+id = "YOUR_AUTH_KV_ID"
+[vars]
+JWT_SECRET = "YOUR_JWT_SECRET"
+ENCRYPTION_KEY = "YOUR_ENCRYPTION_KEY"
