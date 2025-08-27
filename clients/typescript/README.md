@@ -1,108 +1,315 @@
 # CloudContext TypeScript Client
 
-A fully typed TypeScript client for CloudContext - secure, global AI context storage using Cloudflare R2.
+<div align="center">
+  <img src="../../docs/images/CloudContext.png" alt="CloudContext Logo" width="300"/>
+  <br><br>
+  
+  **Official TypeScript client for CloudContext**
+  
+  Secure, distributed AI context storage with full type safety
+  
+  <br>
+  
+  [![npm version](https://badge.fury.io/js/cloudcontext.svg)](https://www.npmjs.com/package/cloudcontext)
+  [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+</div>
 
 ## Installation
 
 ```bash
-npm install @cloudcontext/typescript-client
+npm install cloudcontext
+# or
+yarn add cloudcontext
 ```
 
-## Usage
-
-### Basic Setup
+## Quick Start
 
 ```typescript
-import { CloudContext } from '@cloudcontext/typescript-client';
+import { CloudContext, ContextData, SaveOptions } from 'cloudcontext';
+
+interface UserContext {
+  preferences: {
+    theme: 'light' | 'dark';
+    language: string;
+  };
+  conversation: string[];
+  metadata: {
+    lastActive: string;
+    sessionId: string;
+  };
+}
 
 const client = new CloudContext({
-  baseUrl: 'https://your-cloudcontext-api.com',
-  apiKey: 'your-api-key',
-  contextId: 'my-context' // optional, defaults to 'default'
+  endpoint: 'https://your-worker.your-subdomain.workers.dev',
+  apiKey: 'your-api-key'
+});
+
+// Save context with full type safety
+const userContext: UserContext = {
+  preferences: { theme: 'dark', language: 'en' },
+  conversation: ['Hello!', 'Hi there!'],
+  metadata: { 
+    lastActive: new Date().toISOString(),
+    sessionId: 'sess_123'
+  }
+};
+
+await client.save<UserContext>('user-123', userContext);
+
+// Retrieve context with type inference
+const context = await client.get<UserContext>('user-123');
+if (context) {
+  console.log(context.preferences.theme); // TypeScript knows this is 'light' | 'dark'
+}
+```
+
+## Type Definitions
+
+### Core Interfaces
+
+```typescript
+interface CloudContextOptions {
+  endpoint: string;
+  apiKey: string;
+  timeout?: number;
+}
+
+interface SaveOptions {
+  ttl?: number;
+  metadata?: Record<string, any>;
+}
+
+interface ListOptions {
+  prefix?: string;
+  limit?: number;
+}
+
+interface ContextMetadata {
+  key: string;
+  size: number;
+  createdAt: string;
+  updatedAt: string;
+  ttl?: number;
+}
+```
+
+### Generic Methods
+
+All methods support generic types for better type safety:
+
+```typescript
+// Generic save method
+save<T extends ContextData>(key: string, data: T, options?: SaveOptions): Promise<void>
+
+// Generic get method
+get<T extends ContextData>(key: string): Promise<T | null>
+
+// Typed list with metadata
+listWithMetadata<T extends ContextData>(options?: ListOptions): Promise<ContextMetadata[]>
+```
+
+## API Reference
+
+### Constructor
+
+```typescript
+const client = new CloudContext(options: CloudContextOptions)
+```
+
+### Methods
+
+#### `save<T>(key, data, options?)`
+
+```typescript
+interface SaveOptions {
+  ttl?: number;
+  metadata?: Record<string, any>;
+}
+
+await client.save<UserPreferences>('user-prefs', {
+  theme: 'dark',
+  notifications: true
+}, {
+  ttl: 3600,
+  metadata: { version: '1.0' }
 });
 ```
 
-### Save Context
+#### `get<T>(key)`
 
 ```typescript
-const response = await client.save('Hello, world!', {
-  timestamp: Date.now(),
-  source: 'user-input'
+const preferences = await client.get<UserPreferences>('user-prefs');
+// TypeScript infers the return type as UserPreferences | null
+```
+
+#### `delete(key)`
+
+```typescript
+await client.delete('user-prefs');
+```
+
+#### `list(options?)`
+
+```typescript
+const keys = await client.list({
+  prefix: 'user-',
+  limit: 50
 });
-
-console.log(response.success); // true
-console.log(response.contextId); // 'my-context'
 ```
 
-### Retrieve Context
+#### `exists(key)`
 
 ```typescript
-const context = await client.get();
-console.log(context.content); // 'Hello, world!'
-console.log(context.metadata); // { timestamp: ..., source: 'user-input' }
-
-// Get specific context
-const specificContext = await client.get('another-context');
+const exists = await client.exists('user-123');
+// Returns: boolean
 ```
 
-### List All Contexts
+#### `clearCache()`
+
+TypeScript-specific method for cache management:
 
 ```typescript
-const contexts = await client.list();
-console.log(contexts); // ['my-context', 'another-context', ...]
+client.clearCache(); // Clear local cache
 ```
 
-### Delete Context
+#### `getCacheSize()`
 
 ```typescript
-await client.delete(); // deletes default context
-await client.delete('specific-context'); // deletes specific context
+const size = client.getCacheSize(); // Returns number of cached items
 ```
 
-### Cache Management
+#### `hasCached(key)`
 
 ```typescript
-// Check if context is cached
-const isCached = client.hasCached('my-context');
-
-// Clear all cached data
-client.clearCache();
-
-// Get cache size
-const cacheSize = client.getCacheSize();
+const isCached = client.hasCached('user-123'); // Returns boolean
 ```
 
-## TypeScript Support
+## Advanced TypeScript Features
 
-This client provides full TypeScript support with proper type definitions:
+### Custom Context Types
 
 ```typescript
-import { CloudContextConfig, ContextMetadata, ContextData } from '@cloudcontext/typescript-client';
+interface AIAssistantContext {
+  conversationHistory: Array<{
+    role: 'user' | 'assistant';
+    content: string;
+    timestamp: Date;
+  }>;
+  userProfile: {
+    name: string;
+    preferences: Record<string, any>;
+  };
+  sessionData: {
+    startTime: Date;
+    interactions: number;
+  };
+}
 
-const config: CloudContextConfig = {
-  baseUrl: 'https://api.example.com',
-  apiKey: 'key',
-  contextId: 'optional-id'
+// Type-safe operations
+await client.save<AIAssistantContext>('ai-session-123', {
+  conversationHistory: [
+    { role: 'user', content: 'Hello', timestamp: new Date() }
+  ],
+  userProfile: { name: 'John', preferences: {} },
+  sessionData: { startTime: new Date(), interactions: 1 }
+});
+```
+
+### Union Types and Discriminated Unions
+
+```typescript
+type ContextType = 
+  | { type: 'user'; data: UserContext }
+  | { type: 'session'; data: SessionContext }
+  | { type: 'preferences'; data: PreferencesContext };
+
+await client.save<ContextType>('mixed-context', {
+  type: 'user',
+  data: userContext
+});
+```
+
+### Generic Utility Types
+
+```typescript
+// Extract context data type
+type ExtractContextData<T> = T extends CloudContext<infer U> ? U : never;
+
+// Partial context updates
+type PartialContext<T> = {
+  [K in keyof T]?: T[K] extends object ? PartialContext<T[K]> : T[K];
 };
-
-const metadata: ContextMetadata = {
-  tags: ['important', 'ai-context'],
-  priority: 'high'
-};
 ```
 
-## Building
+## Error Handling with Types
+
+```typescript
+import { 
+  CloudContextError, 
+  NetworkError, 
+  AuthenticationError, 
+  ValidationError 
+} from 'cloudcontext';
+
+try {
+  await client.save('key', data);
+} catch (error) {
+  if (error instanceof NetworkError) {
+    console.error('Network issue:', error.message);
+  } else if (error instanceof AuthenticationError) {
+    console.error('Auth failed:', error.message);
+  } else if (error instanceof ValidationError) {
+    console.error('Validation failed:', error.details);
+  }
+}
+```
+
+## Configuration
+
+### TypeScript Config
+
+Ensure your `tsconfig.json` includes:
+
+```json
+{
+  "compilerOptions": {
+    "target": "ES2020",
+    "module": "ESNext",
+    "moduleResolution": "node",
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true
+  }
+}
+```
+
+## Building and Development
 
 ```bash
+# Install dependencies
+npm install
+
+# Build TypeScript
 npm run build
+
+# Run type checking
+npm run type-check
+
+# Run tests
+npm test
 ```
 
-## Development
+## Browser and Node.js Support
 
-```bash
-npm run build:watch
-```
+- TypeScript 4.5+
+- Node.js 16+
+- All modern browsers with ES2020 support
+
+## Contributing
+
+See the main [CONTRIBUTING.md](../../CONTRIBUTING.md) for guidelines.
 
 ## License
 
-MIT
+MIT License - see [LICENSE](../../LICENSE) for details.

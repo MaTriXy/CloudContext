@@ -44,10 +44,40 @@ Deploy your own CloudContext instance in under 2 minutes:
 curl -sSL https://raw.githubusercontent.com/MaTriXy/CloudContext/main/setup.sh | bash
 ```
 
+## 📚 Client Libraries
+
+CloudContext provides official client libraries for multiple programming languages:
+
+| Language | Status | Installation | Documentation |
+|----------|--------|--------------|---------------|
+| **JavaScript** | ✅ Ready | `npm install cloudcontext` | [JS Docs](clients/javascript/) |
+| **TypeScript** | ✅ Ready | `npm install cloudcontext` | [TS Docs](clients/typescript/) |
+| **Python** | ✅ Ready | `pip install cloudcontext` | [Python Docs](clients/python/) |
+
+### Quick Start Example
+
+```javascript
+import CloudContext from 'cloudcontext';
+
+const client = new CloudContext({
+  endpoint: 'https://your-worker.your-subdomain.workers.dev',
+  apiKey: 'your-api-key'
+});
+
+// Save context
+await client.save('user-123', { 
+  preferences: { theme: 'dark' },
+  conversation: ['Hello', 'Hi there!'] 
+});
+
+// Retrieve context
+const context = await client.get('user-123');
+console.log(context.preferences.theme); // 'dark'
+```
+
 ## 📖 Documentation
 
 - [API Reference](docs/API.md) - Complete API documentation
-- [Client Libraries](clients/) - JavaScript and Python clients
 - [Examples](examples/) - Integration examples and use cases
 
 ## 🤝 Contributing
