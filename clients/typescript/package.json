@@ -1,0 +1,62 @@
+{
+  "name": "@cloudcontext/typescript-client",
+  "version": "1.0.0",
+  "description": "TypeScript client for CloudContext - Secure, global AI context storage",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "module": "dist/index.js",
+  "files": [
+    "dist/**/*",
+    "src/**/*"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "build:watch": "tsc --watch",
+    "clean": "rm -rf dist",
+    "prepublishOnly": "npm run clean && npm run build",
+    "test": "jest",
+    "test:watch": "jest --watch",
+    "test:coverage": "jest --coverage",
+    "test:integration": "jest --testPathPattern=integration"
+  },
+  "keywords": [
+    "ai",
+    "context",
+    "storage",
+    "cloudflare",
+    "r2",
+    "typescript",
+    "client"
+  ],
+  "author": "MaTriXy",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/MaTriXy/CloudContext.git",
+    "directory": "clients/typescript"
+  },
+  "devDependencies": {
+    "typescript": "^5.0.0",
+    "@types/jest": "^29.0.0",
+    "jest": "^29.0.0",
+    "ts-jest": "^29.0.0"
+  },
+  "peerDependencies": {
+    "typescript": ">=4.5.0"
+  },
+  "engines": {
+    "node": ">=16.0.0"
+  },
+  "jest": {
+    "preset": "ts-jest",
+    "testEnvironment": "jsdom",
+    "setupFilesAfterEnv": ["<rootDir>/tests/setup.ts"],
+    "collectCoverageFrom": [
+      "src/**/*.ts",
+      "!src/**/*.d.ts"
+    ],
+    "testMatch": [
+      "**/tests/**/*.test.ts"
+    ]
+  }
+}
