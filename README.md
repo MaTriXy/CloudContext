@@ -1,19 +1,9 @@
-# CloudContext
+# CloudContext 🔐
 
-<div align="center">
-  <img src="docs/images/CloudContext.png" alt="CloudContext Logo" width="400"/>
-  <br><br>
-  
-  **Turn Cloudflare R2 into your personal AI memory bank**
-  
-  Store, sync, and access AI contexts from anywhere in the world with military-grade encryption and zero egress fees.
-  
-  <br>
-  
-  [![Deploy to Cloudflare Workers](https://img.shields.io/badge/Deploy%20to-Cloudflare%20Workers-F38020?logo=cloudflare)](https://workers.cloudflare.com/)
-  [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-  [![GitHub Stars](https://img.shields.io/github/stars/MaTriXy/CloudContext?style=social)](https://github.com/MaTriXy/CloudContext)
-</div>
+[![Deploy to Cloudflare Workers](https://img.shields.io/badge/Deploy%20to-Cloudflare%20Workers-F38020?logo=cloudflare)](https://workers.cloudflare.com/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+
+**Turn Cloudflare R2 into your personal AI memory bank** - Store, sync, and access AI contexts from anywhere in the world with military-grade encryption and zero egress fees.
 
 ## What is CloudContext?
 
