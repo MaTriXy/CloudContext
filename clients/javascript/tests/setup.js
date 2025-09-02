@@ -2,6 +2,8 @@
  * Jest setup file for JavaScript client tests
  */
 
+import { jest, beforeEach } from '@jest/globals';
+
 // Mock fetch globally
 global.fetch = jest.fn();
 
