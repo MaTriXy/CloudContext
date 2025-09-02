@@ -1,89 +1,142 @@
-# CloudContext 🔐
+# CloudContext
 
-[![Deploy to Cloudflare Workers](https://img.shields.io/badge/Deploy%20to-Cloudflare%20Workers-F38020?logo=cloudflare)](https://workers.cloudflare.com/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-**Turn Cloudflare R2 into your personal AI memory bank** - Store, sync, and access AI contexts from anywhere in the world with military-grade encryption and zero egress fees.
+A simple, secure API for storing and retrieving AI conversation contexts using Cloudflare Workers and R2 storage.
 
 ## What is CloudContext?
 
-CloudContext is a secure, distributed AI context storage service built on Cloudflare's global infrastructure. It enables AI applications and users to maintain persistent, encrypted context across sessions and devices, solving the fundamental problem of AI memory limitations.
+CloudContext solves a basic problem: AI assistants forget everything between conversations. This service provides a persistent storage layer for AI contexts, conversation history, and user preferences that survives across sessions.
 
-### The Problem We Solve
+I built this because I was tired of having to re-explain context to AI assistants every time I started a new conversation. It runs on Cloudflare's infrastructure, so it's fast and has good global coverage.
 
-Modern AI assistants lose context between conversations, forcing users to repeatedly provide background information. CloudContext bridges this gap by creating a persistent, secure memory layer that:
+## How it works
 
-- **Preserves Context**: Maintain conversation history and user preferences across sessions
-- **Enables Continuity**: Pick up where you left off on any device, anywhere
-- **Scales Globally**: Leverage Cloudflare's 330+ edge locations for low-latency access
-- **Ensures Privacy**: Your data is encrypted end-to-end with AES-256-GCM
+- Store AI contexts, conversation history, and user data via a REST API
+- Data is stored in Cloudflare R2 (S3-compatible object storage)
+- Basic authentication with API keys
+- Versioning support for tracking context changes
+- JavaScript/TypeScript client library included
 
-### Use Cases
+## Current Features
 
-- **AI Assistants**: Maintain conversation context and user preferences
-- **Development Tools**: Store project context and coding patterns
-- **Research Applications**: Preserve research notes and findings
-- **Multi-device Workflows**: Sync AI contexts across desktop, mobile, and web
+- REST API for storing/retrieving contexts
+- Bearer token authentication
+- Context versioning and history
+- CORS support for browser usage
+- JavaScript client library
+- Automated deployment script
 
-## ✨ Features
+## Getting Started
 
-- 🌍 **Global Access** - Available from 330+ Cloudflare edge locations worldwide
-- 🔐 **Military-grade Security** - AES-256-GCM encryption with client-side key management
-- 📱 **Multi-device Sync** - Automatic conflict resolution and real-time synchronization
-- 📚 **Version History** - Track changes and rollback to previous context states
-- 💰 **Cost Effective** - Zero egress fees with Cloudflare R2 storage
-- ⚡ **Lightning Fast** - Edge caching for sub-100ms response times
-- 🔄 **Automatic Backups** - Redundant storage across multiple regions
-- 🛡️ **Zero Trust Architecture** - End-to-end encryption, server never sees plaintext
+### Prerequisites
 
-## 🚀 Quick Deploy
+- Cloudflare account
+- Wrangler CLI installed
+- Basic knowledge of Cloudflare Workers
 
-Deploy your own CloudContext instance in under 2 minutes:
+### Deployment
+
+1. Clone this repository
+2. Copy `wrangler.example.toml` to `wrangler.toml` and configure your settings
+3. Run the setup script:
 
 ```bash
-curl -sSL https://raw.githubusercontent.com/MaTriXy/CloudContext/main/setup.sh | bash
+./setup.sh
 ```
 
-## 📚 Client Libraries
+Or deploy manually:
 
-CloudContext provides official client libraries for multiple programming languages:
+```bash
+npm install -g wrangler
+wrangler deploy
+```
 
-| Language | Status | Installation | Documentation |
-|----------|--------|--------------|---------------|
-| **JavaScript** | ✅ Ready | `npm install cloudcontext` | [JS Docs](clients/javascript/) |
-| **TypeScript** | ✅ Ready | `npm install cloudcontext` | [TS Docs](clients/typescript/) |
-| **Python** | ✅ Ready | `pip install cloudcontext` | [Python Docs](clients/python/) |
-
-### Quick Start Example
+### Basic Usage
 
 ```javascript
-import CloudContext from 'cloudcontext';
+import CloudContext from './clients/javascript/index.js';
 
 const client = new CloudContext({
-  endpoint: 'https://your-worker.your-subdomain.workers.dev',
+  baseUrl: 'https://your-worker.your-subdomain.workers.dev',
   apiKey: 'your-api-key'
 });
 
-// Save context
-await client.save('user-123', { 
-  preferences: { theme: 'dark' },
-  conversation: ['Hello', 'Hi there!'] 
+// Save some context
+await client.save({
+  conversation: ['Hello', 'Hi there!'],
+  preferences: { theme: 'dark' }
 });
 
-// Retrieve context
-const context = await client.get('user-123');
+// Retrieve it later
+const context = await client.get();
 console.log(context.preferences.theme); // 'dark'
 ```
 
-## 📖 Documentation
+### API Endpoints
 
-- [API Reference](docs/API.md) - Complete API documentation
-- [Examples](examples/) - Integration examples and use cases
+- `POST /api/context` - Save context data
+- `GET /api/context` - Retrieve context data
+- `GET /api/context/list` - List all contexts for a user
+- `GET /api/context/version` - Get context version history
+- `POST /api/context/restore` - Restore a previous version
+- `POST /api/context/sync` - Sync context data
+- `GET /api/health` - Health check
 
-## 🤝 Contributing
+## Project Status
 
-We welcome contributions! See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
+This is a working implementation but still evolving. The core functionality is stable, but I'm continuing to add features and improve the API.
 
-## 📄 License
+Currently implemented:
+- ✅ Core storage and retrieval
+- ✅ Authentication system
+- ✅ Context versioning
+- ✅ JavaScript client
+- ✅ Automated deployment
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+## Client Libraries
+
+- **JavaScript/TypeScript**: Ready to use (see `clients/javascript/`)
+- **Python**: Planned
+- **Go**: Planned
+
+## Configuration
+
+Copy `wrangler.example.toml` to `wrangler.toml` and update with your settings:
+
+```toml
+name = "your-cloudcontext-worker"
+main = "src/worker.js"
+
+[env.production]
+vars = { ENVIRONMENT = "production" }
+
+[[env.production.r2_buckets]]
+binding = "CONTEXT_BUCKET"
+bucket_name = "your-context-bucket"
+```
+
+## Development
+
+```bash
+# Start local development server
+wrangler dev
+
+# Run tests
+npm test
+
+# Deploy to production
+wrangler deploy
+```
+
+## Cost
+
+Using Cloudflare's free tier, this should handle thousands of requests per day at no cost. R2 storage is very affordable - typically under $1/month for most personal use cases.
+
+## Contributing
+
+Pull requests welcome. This is a fairly simple project, so please keep contributions focused and well-tested.
+
+## License
+
+MIT License - see [LICENSE](LICENSE) file.
