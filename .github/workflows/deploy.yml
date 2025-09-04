@@ -1,1 +1,212 @@
-# GitHub Workflow
+name: Deploy CloudContext
+
+on:
+  push:
+    branches:
+      - main
+      - production
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+env:
+  NODE_VERSION: '22'
+  CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+  CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    name: Test and Lint
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          
+      - name: Install dependencies
+        run: npm ci
+        
+      - name: Run linting
+        run: npm run lint
+        
+      - name: Run unit tests
+        run: npm run test:unit
+        
+      - name: Run security audit
+        run: npm audit --audit-level moderate
+        continue-on-error: true
+
+  build:
+    runs-on: ubuntu-latest
+    name: Build and Validate
+    needs: [test]
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          
+      - name: Install dependencies
+        run: npm ci
+          
+      - name: Validate worker syntax
+        run: node -c src/worker.js
+        
+      - name: Check wrangler configuration
+        run: |
+          if [ -f "wrangler.toml" ]; then
+            echo "✓ wrangler.toml exists"
+          else
+            echo "❌ wrangler.toml not found - this is expected for development"
+          fi
+
+  deploy-staging:
+    runs-on: ubuntu-latest
+    name: Deploy to Staging
+    needs: [test, build]
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    environment:
+      name: staging
+      url: https://cloudcontext-staging.your-domain.workers.dev
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          
+      - name: Install dependencies
+        run: npm ci
+        
+      - name: Install Wrangler
+        run: npm install -g wrangler@latest
+        
+      - name: Deploy to Cloudflare Workers (Staging)
+        run: |
+          wrangler deploy \
+            --env staging \
+            --var ENVIRONMENT:staging \
+            --compatibility-date $(date +%Y-%m-%d)
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          
+      - name: Run integration tests against staging
+        run: |
+          export API_BASE_URL="https://cloudcontext-staging.your-domain.workers.dev"
+          export TEST_API_KEY="${{ secrets.STAGING_TEST_API_KEY }}"
+          npm run test:integration
+        continue-on-error: true
+        
+      - name: Notify deployment status
+        uses: 8398a7/action-slack@v3
+        if: always()
+        with:
+          status: ${{ job.status }}
+          channel: '#deployments'
+          webhook_url: ${{ secrets.SLACK_WEBHOOK_URL }}
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+
+  deploy-production:
+    runs-on: ubuntu-latest
+    name: Deploy to Production
+    needs: [deploy-staging]
+    if: github.ref == 'refs/heads/production' && github.event_name == 'push'
+    environment:
+      name: production
+      url: https://cloudcontext.your-domain.workers.dev
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          
+      - name: Install dependencies
+        run: npm ci
+        
+      - name: Install Wrangler
+        run: npm install -g wrangler@latest
+        
+      - name: Deploy to Cloudflare Workers (Production)
+        run: |
+          wrangler deploy \
+            --env production \
+            --var ENVIRONMENT:production \
+            --compatibility-date $(date +%Y-%m-%d)
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          
+      - name: Run smoke tests against production
+        run: |
+          export API_BASE_URL="https://cloudcontext.your-domain.workers.dev"
+          export TEST_API_KEY="${{ secrets.PRODUCTION_TEST_API_KEY }}"
+          npm run test:smoke
+        timeout-minutes: 5
+        
+      - name: Create deployment tag
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+          git tag -a "deploy-$(date +%Y%m%d-%H%M%S)" -m "Production deployment $(date)"
+          git push origin --tags
+          
+      - name: Notify production deployment
+        uses: 8398a7/action-slack@v3
+        if: always()
+        with:
+          status: ${{ job.status }}
+          channel: '#deployments'
+          webhook_url: ${{ secrets.SLACK_WEBHOOK_URL }}
+          text: |
+            Production deployment ${{ job.status }}!
+            Commit: ${{ github.sha }}
+            Branch: ${{ github.ref }}
+            Actor: ${{ github.actor }}
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+
+  cleanup:
+    runs-on: ubuntu-latest
+    name: Cleanup
+    if: github.event_name == 'pull_request' && github.event.action == 'closed'
+    
+    steps:
+      - name: Cleanup preview deployment
+        run: |
+          echo "Cleaning up preview deployment for PR #${{ github.event.number }}"
+          # Add cleanup logic here if you have preview deployments
+          
+      - name: Clean up test data
+        run: |
+          echo "Cleaning up any test data created during CI/CD"
+          # Add cleanup logic for test data
+
+# Security note: Make sure to configure the following secrets in your repository:
+# - CLOUDFLARE_API_TOKEN: Your Cloudflare API token with Workers deploy permissions
+# - CLOUDFLARE_ACCOUNT_ID: Your Cloudflare account ID
+# - STAGING_TEST_API_KEY: API key for staging environment testing
+# - PRODUCTION_TEST_API_KEY: API key for production environment testing (optional)
+# - SLACK_WEBHOOK_URL: Slack webhook URL for deployment notifications (optional)

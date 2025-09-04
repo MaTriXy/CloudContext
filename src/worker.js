@@ -44,8 +44,7 @@ export default {
           return jsonResponse({ error: 'Not found' }, 404, corsHeaders);
       }
     } catch (error) {
-      console.error('Worker error:', error);
-      return jsonResponse({ error: 'Internal server error' }, 500, corsHeaders);
+      return handleError(error, 'Worker error', corsHeaders);
     }
   }
 };
@@ -112,13 +111,42 @@ async function getContext(env, userId, contextId, corsHeaders) {
 }
 
 async function saveContext(request, env, userId, contextId, sessionId, corsHeaders) {
-  const data = await request.json();
-  
-  if (!data.content || typeof data.content !== 'object') {
-    return jsonResponse({ error: 'Invalid context structure' }, 400, corsHeaders);
+  const data = await validateContextData(request);
+  if (data.error) {
+    return jsonResponse(data, 400, corsHeaders);
   }
   
-  const context = {
+  const context = await buildContextWithMetadata(data, userId, contextId, sessionId);
+  const encryptedData = await encrypt(JSON.stringify(context), env.ENCRYPTION_KEY);
+  
+  await Promise.all([
+    storeCurrentContext(env, userId, contextId, encryptedData, context.metadata),
+    storeVersionedContext(env, userId, contextId, context.metadata.version, encryptedData),
+    updateContextIndex(env, userId, contextId, context.metadata)
+  ]);
+  
+  return jsonResponse({
+    success: true,
+    contextId,
+    version: context.metadata.version,
+    timestamp: context.metadata.timestamp
+  }, 200, corsHeaders);
+}
+
+async function validateContextData(request) {
+  try {
+    const data = await request.json();
+    if (!data.content || typeof data.content !== 'object') {
+      return { error: 'Invalid context structure' };
+    }
+    return data;
+  } catch {
+    return { error: 'Invalid JSON payload' };
+  }
+}
+
+async function buildContextWithMetadata(data, userId, contextId, sessionId) {
+  return {
     ...data,
     metadata: {
       ...data.metadata,
@@ -130,11 +158,11 @@ async function saveContext(request, env, userId, contextId, sessionId, corsHeade
       checksum: await generateChecksum(JSON.stringify(data.content))
     }
   };
-  
-  const encryptedData = await encrypt(JSON.stringify(context), env.ENCRYPTION_KEY);
-  
-  const currentKey = `contexts/${userId}/${contextId}/current.json`;
-  await env.R2_BUCKET.put(currentKey, encryptedData, {
+}
+
+async function storeCurrentContext(env, userId, contextId, encryptedData, metadata) {
+  const key = `contexts/${userId}/${contextId}/current.json`;
+  return env.R2_BUCKET.put(key, encryptedData, {
     httpMetadata: {
       contentType: 'application/json',
       cacheControl: 'no-cache'
@@ -142,22 +170,15 @@ async function saveContext(request, env, userId, contextId, sessionId, corsHeade
     customMetadata: {
       userId,
       contextId,
-      sessionId,
-      timestamp: context.metadata.timestamp
+      sessionId: metadata.sessionId,
+      timestamp: metadata.timestamp
     }
   });
-  
-  const versionKey = `contexts/${userId}/${contextId}/versions/${context.metadata.version}.json`;
-  await env.R2_BUCKET.put(versionKey, encryptedData);
-  
-  await updateContextIndex(env, userId, contextId, context.metadata);
-  
-  return jsonResponse({
-    success: true,
-    contextId,
-    version: context.metadata.version,
-    timestamp: context.metadata.timestamp
-  }, 200, corsHeaders);
+}
+
+async function storeVersionedContext(env, userId, contextId, version, encryptedData) {
+  const key = `contexts/${userId}/${contextId}/versions/${version}.json`;
+  return env.R2_BUCKET.put(key, encryptedData);
 }
 
 async function listContexts(env, userId, corsHeaders) {
@@ -297,54 +318,85 @@ async function updateContextIndex(env, userId, contextId, metadata) {
 }
 
 async function encrypt(text, key) {
-  const encoder = new TextEncoder();
-  const data = encoder.encode(text);
-  
-  const cryptoKey = await crypto.subtle.importKey(
-    'raw',
-    encoder.encode(key.padEnd(32, '0').slice(0, 32)),
-    { name: 'AES-GCM' },
-    false,
-    ['encrypt']
-  );
-  
+  const cryptoKey = await deriveCryptoKey(key, ['encrypt']);
+  const plaintext = new TextEncoder().encode(text);
   const iv = crypto.getRandomValues(new Uint8Array(12));
-  const encrypted = await crypto.subtle.encrypt(
+  
+  const ciphertext = await crypto.subtle.encrypt(
     { name: 'AES-GCM', iv },
     cryptoKey,
-    data
+    plaintext
   );
   
-  const combined = new Uint8Array(iv.byteLength + encrypted.byteLength);
-  combined.set(iv, 0);
-  combined.set(new Uint8Array(encrypted), iv.byteLength);
-  
-  return btoa(String.fromCharCode(...combined));
+  return encodeEncryptedData(iv, ciphertext);
 }
 
 async function decrypt(encryptedText, key) {
-  const combined = Uint8Array.from(atob(encryptedText), c => c.charCodeAt(0));
+  const { iv, ciphertext } = decodeEncryptedData(encryptedText);
+  const cryptoKey = await deriveCryptoKey(key, ['decrypt']);
   
-  const iv = combined.slice(0, 12);
-  const encrypted = combined.slice(12);
-  
-  const encoder = new TextEncoder();
-  const cryptoKey = await crypto.subtle.importKey(
-    'raw',
-    encoder.encode(key.padEnd(32, '0').slice(0, 32)),
-    { name: 'AES-GCM' },
-    false,
-    ['decrypt']
-  );
-  
-  const decrypted = await crypto.subtle.decrypt(
+  const plaintext = await crypto.subtle.decrypt(
     { name: 'AES-GCM', iv },
     cryptoKey,
-    encrypted
+    ciphertext
   );
   
-  const decoder = new TextDecoder();
-  return decoder.decode(decrypted);
+  return new TextDecoder().decode(plaintext);
+}
+
+async function deriveCryptoKey(key, keyUsages) {
+  const normalizedKey = normalizeKey(key);
+  const keyBytes = new TextEncoder().encode(normalizedKey);
+  
+  return crypto.subtle.importKey(
+    'raw',
+    keyBytes,
+    { name: 'AES-GCM' },
+    false,
+    keyUsages
+  );
+}
+
+function normalizeKey(key) {
+  // Ensure key is exactly 32 bytes for AES-256
+  return key.padEnd(32, '0').slice(0, 32);
+}
+
+function encodeEncryptedData(iv, ciphertext) {
+  const combined = new Uint8Array(iv.byteLength + ciphertext.byteLength);
+  combined.set(iv, 0);
+  combined.set(new Uint8Array(ciphertext), iv.byteLength);
+  return btoa(String.fromCharCode(...combined));
+}
+
+function decodeEncryptedData(encryptedText) {
+  const combined = Uint8Array.from(atob(encryptedText), c => c.charCodeAt(0));
+  const iv = combined.slice(0, 12);
+  const ciphertext = combined.slice(12);
+  return { iv, ciphertext };
+}
+
+function handleError(error, context, corsHeaders) {
+  const timestamp = new Date().toISOString();
+  const errorId = crypto.randomUUID();
+  
+  // Log error with proper structure for monitoring
+  const logEntry = {
+    errorId,
+    timestamp,
+    context,
+    message: error.message,
+    stack: error.stack
+  };
+  
+  // In production, this would be sent to a logging service
+  console.error(JSON.stringify(logEntry));
+  
+  return jsonResponse({
+    error: 'Internal server error',
+    errorId,
+    timestamp
+  }, 500, corsHeaders);
 }
 
 async function verifyJWT(token, secret) {

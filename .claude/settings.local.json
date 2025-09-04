@@ -1,0 +1,12 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(/usr/bin/git log --oneline -10)",
+      "Bash(grep:*)",
+      "Bash(cat:*)",
+      "Read(//**)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}
